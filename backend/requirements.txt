@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+supabase-py
+pgvector
+httpx
+PyMuPDF
+google-generativeai
