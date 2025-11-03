@@ -12,23 +12,23 @@ import google.generativeai as genai
 try:
     genai.configure(api_key = settings.GEMINI_API_KEY)
 
-    EMBEDDING_MODEL_NAME = "models/text-embedding-004"
+    EMBEDDING_MODEL = "models/text-embedding-004"
     EMBEDDING_DIM = 768
     logging.info("Successfully configured Gemini API")
 
 except Exception as e:
     logging.error(f"Failed to configure Gemini API: {str(e)}")
-    EMBEDDING_MODEL_NAME = None
+    EMBEDDING_MODEL = None
 
 
 async def get_embedding(text_chunk: str) -> List[float]:
-    if not EMBEDDING_MODEL_NAME:
+    if not EMBEDDING_MODEL:
         raise ValueError("Gemini API not configured")
         return [0.0] * EMBEDDING_DIM
 
     try:
         result = await genai.embed(
-            model = EMBEDDING_MODEL_NAME,
+            model = EMBEDDING_MODEL,
             content = text_chunk,
             task_type = "RETRIEVAL_DOCUMENT"
         )
