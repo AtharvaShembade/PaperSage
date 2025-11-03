@@ -2,8 +2,9 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 pydantic
-supabase-py
+supabase
 pgvector
 httpx
 PyMuPDF
 google-generativeai
+psycopg2-binary

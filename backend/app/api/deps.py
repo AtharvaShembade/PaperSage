@@ -1,7 +1,7 @@
 from fastapi import Request, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from supabase_py import create_client, Client
+from supabase import create_client, Client
 
 from app.core.config import settings
 from app.models import crud, models
@@ -24,13 +24,14 @@ def get_current_user(
     try:
         auth_user = supabase.auth.get_user(token)
 
-        if not auth_user or not auth_user.get('id'):
+        if not auth_user or not auth_user.user:
             raise HTTPException(
                 status_code = status.HTTP_401_UNAUTHORIZED,
                 detail = "Invalid or expired token"
             )
         
-        user_email = auth_user.get('email')
+        user_email = auth_user.email
+
         if not user_email:
             raise HTTPException(status_code = 401, detail = "No email found for user")
 
@@ -45,8 +46,8 @@ def get_current_user(
 
     if db_user is None:
         raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = "User not found"
+            status_code = status.HTTP_404_NOT_FOUND,
+            detail = "User exists in Supabase but not in local DB."
         )
 
     return db_user

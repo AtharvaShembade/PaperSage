@@ -1,10 +1,12 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.models.database import Base
+
+from .database import Base
 from pgvector.sqlalchemy import Vector
 
-# User model
+# --- User Model ---
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key = True, index = True)
@@ -12,20 +14,53 @@ class User(Base):
 
     projects = relationship("Project", back_populates = "owner")
 
-# Project model
+# --- Project Model ---
+
 class Project(Base):
     __tablename__ = "projects"
     id = Column(Integer, primary_key = True, index = True)
     name = Column(String, index = True, nullable = False)
-    created_at = Column(DateTime, default = datetime.now)
+    created_at = Column(DateTime, default = datetime.utcnow)
 
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="projects")
 
     papers = relationship("Paper", secondary="project_papers", back_populates="projects")
 
-# projectPaper model
+# --- Association Table (for Many-to-Many) ---
 
-# Paper model
+class ProjectPaper(Base):
+    __tablename__ = "project_papers"
+    project_id = Column(Integer, ForeignKey("projects.id"), primary_key = True)
+    paper_id = Column(Integer, ForeignKey("papers.id"), primary_key = True)
 
-# PaperChunk model
+# --- Paper Model ---
+
+class Paper(Base):
+    __tablename__ = "papers"
+    id = Column(Integer, primary_key = True, index = True)
+
+    external_id = Column(String, unique = True,index = True, nullable = False)
+
+    title = Column(String, nullable = False)
+    abstract = Column(Text, nullable = True)
+    year = Column(Integer, nullable = True)
+
+    status = Column(String, default = "processing", nullable = False, index = True)
+
+    projects = relationship("Project", secondary = "project_papers", back_populates = "papers")
+
+    chunks = relationship("Chunk", back_populates = "paper", cascade = "all, delete-orphan")
+
+# --- Chunk Model (for RAG) ---
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+    id = Column(Integer, primary_key = True, index = True)
+
+    paper_id = Column(Integer, ForeignKey("papers.id"), nullable = False, index = True)
+    paper = relationship("Paper", back_populates = "chunks")
+
+    chunk_text = Column(Text, nullable = False)
+
+    embedding = Column(Vector(768))
