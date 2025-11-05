@@ -15,7 +15,27 @@ try:
 
 except Exception as e:
     logging.error(f"Failed to get query embedding: {e}")
-    return [0.0] * EMBEDDING_DIM
+    GENERATIVE_MODEL = None
+    EMBEDDING_MODEL = None
+
+async def _get_query_embedding(query: str) -> List[float]:
+    if not EMBEDDING_MODEL:
+        logging.error("RAG embedding model is not configured.")
+        return [0.0] * EMBEDDING_DIM
+        
+    try:
+        # Note the task_type is 'RETRIEVAL_QUERY'.
+        # This is different from the 'RETRIEVAL_DOCUMENT' in your ingestion service.
+        result = await genai.embed_content_async(
+            model=EMBEDDING_MODEL,
+            content=query,
+            task_type="RETRIEVAL_QUERY" 
+        )
+        return result['embedding']
+        
+    except Exception as e:
+        logging.error(f"Failed to get query embedding: {e}")
+        return [0.0] * EMBEDDING_DIM
 
 def _build_rag_prompt(query: str, chunks: List[models.Chunk]) -> str:
 

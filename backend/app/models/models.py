@@ -64,3 +64,17 @@ class Chunk(Base):
     chunk_text = Column(Text, nullable = False)
 
     embedding = Column(Vector(768))
+
+# --- Citation Graph Model ---
+
+class CitationLink(Base):
+    __tablename__ = "citation_links"
+
+    source_paper_id = Column(String, ForeignKey("papers.external_id"), primary_key=True)
+    target_paper_id = Column(String, ForeignKey("papers.external_id"), primary_key=True)
+
+    # You can add this in V2 when you do intent classification
+    # intent = Column(String, nullable=True) # "supports", "opposes"
+
+    source_paper = relationship("Paper", foreign_keys=[source_paper_id])
+    target_paper = relationship("Paper", foreign_keys=[target_paper_id])

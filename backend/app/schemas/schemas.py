@@ -1,10 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 from typing import List, Optional
 from datetime import datetime
 
 # --- Paper Schemas ---
 
-class Paperbase(BaseModel):
+class PaperBase(BaseModel):
     external_paper_id: str
     title: str
     abstract: Optional[str] = None
@@ -21,7 +21,7 @@ class Paper(PaperBase):
         orm_mode = True
 
 class PaperSearchDetail(PaperBase):
-    openAccessPdf: Optional[dict] =- None
+    openAccessPdf: Optional[dict] = None
 
 # --- Project Schemas ---
 
@@ -66,4 +66,20 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
 
-    
+# --- Analysis Schemas ---
+
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    year: Optional[int] = None
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+
+class GraphResponse(BaseModel):
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
+
+    class Config:
+        orm_mode = True

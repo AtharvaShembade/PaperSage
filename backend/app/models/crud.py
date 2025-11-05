@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from app.models import models
 from app.schemas import schemas
+from typing import List, Dict, Any
 
 # --- User CRUD ---
 
@@ -17,7 +18,7 @@ def create_user(db: Session, user: schemas.UserCreate):
     #placeholder for hashing
     fake_hashed_password = user.password + "_hashed"
 
-    db_user = models.User(email = user.email, hashed_password = fake_hashed_password)\
+    db_user = models.User(email = user.email, hashed_password = fake_hashed_password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -110,3 +111,18 @@ def get_relevant_chunks(
     ).limit(limit).all()
 
     return relevant_chunks
+
+# --- Citation Graph CRUD ---
+
+def create_citation_links(db: Session, links_data: List[Dict[str, str]]):
+
+    from sqlalchemy.dialects.postgresql import insert
+
+    insert_stmt = insert(models.CitationLink).values(links_data)
+
+    do_nothing_stmt = insert_stmt.on_conflict_do_nothing(
+        index_elements = ["source_paper_id", "target_paper_id"]
+    )
+
+    db.execute(do_nothing_stmt)
+    db.commit()
