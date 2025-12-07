@@ -5,13 +5,13 @@ from datetime import datetime
 # --- Paper Schemas ---
 
 class PaperBase(BaseModel):
-    external_paper_id: str
+    external_id: str
     title: str
     abstract: Optional[str] = None
     year: Optional[int] = None
 
 class PaperCreate(PaperBase):
-    pdf_url: HttpUrl
+    pdf_url: Optional[HttpUrl] = None
 
 class Paper(PaperBase):
     id: int

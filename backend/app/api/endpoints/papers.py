@@ -21,7 +21,7 @@ async def add_paper(
     if project.owner_id != current_user.id:
         raise HTTPException(status_code = 403, detail = "Not authorized to add paper to this project")
 
-    db_paper = crud.get_paper_by_external_id(db, external_id = paper_to_add.external_paper_id)
+    db_paper = crud.get_paper(db, paper_to_add.external_paper_id)
 
     if db_paper:
         crud.link_paper_to_project(db = db, project_id = project_id, paper_id = db_paper.id)
@@ -31,10 +31,14 @@ async def add_paper(
 
     crud.link_paper_to_project(db = db, project_id = project_id, paper_id = db_paper.id)
 
-    background_tasks.add_task(
-        ingestion_service.process_paper,
-        paper_id = db_paper.id,
-        pdf_url = paper_to_add.pdf_url
-    )    
+    if paper_to_add.pdf_url:
+        background_tasks.add_task(
+            ingestion_service.process_paper,
+            paper_id = db_paper.id,
+            pdf_url = str(paper_to_add.pdf_url)
+        )
+    else:
+        # Mark as ready without processing (no PDF to ingest)
+        crud.update_paper_status(db, db_paper.id, "ready")
 
-    return {"status": "ok", "message": "Paper ingestion started in the background."}
+    return {"status": "ok", "message": "Paper added to project."}

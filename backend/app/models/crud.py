@@ -49,9 +49,11 @@ def delete_project(db: Session, project_id = int):
 def get_paper(db: Session, paper_id: str):
     return db.query(models.Paper).filter(models.Paper.external_id == paper_id).first()
 
+
+
 def create_paper(db: Session, paper: schemas.PaperCreate, status: str = "processing"):
     db_paper = models.Paper(
-        external_id = paper.external_id,
+        external_id = paper.external_paper_id,
         title = paper.title,
         abstract = paper.abstract,
         year = paper.year,
