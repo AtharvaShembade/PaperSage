@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import projects, papers, rag, analysis
+from .endpoints import projects, papers, rag, analysis, search
 
 router = APIRouter()
 

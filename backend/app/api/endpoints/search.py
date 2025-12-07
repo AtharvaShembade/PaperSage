@@ -3,6 +3,7 @@ from typing import List
 from app.api import deps
 from app.services import search_service
 from app.schemas import schemas
+from app.models import models
 
 router = APIRouter()
 
