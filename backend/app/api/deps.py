@@ -30,7 +30,7 @@ def get_current_user(
                 detail = "Invalid or expired token"
             )
         
-        user_email = auth_user.email
+        user_email = auth_user.user.email
 
         if not user_email:
             raise HTTPException(status_code = 401, detail = "No email found for user")
@@ -45,9 +45,6 @@ def get_current_user(
     db_user = crud.get_user_by_email(db, email = user_email)
 
     if db_user is None:
-        raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
-            detail = "User exists in Supabase but not in local DB."
-        )
+        db_user = crud.create_user(db, email=user_email)
 
     return db_user
