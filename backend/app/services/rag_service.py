@@ -6,7 +6,7 @@ from app.core.config import settings
 from typing import List
 
 try:
-    GENERATIVE_MODEL = genai.GenerativeModel("gemini-1.5-pro-latest")
+    GENERATIVE_MODEL = genai.GenerativeModel("gemini-2.5-pro")
 
     EMBEDDING_MODEL = "models/text-embedding-004"
     EMBEDDING_DIM = 768
@@ -72,7 +72,7 @@ async def answer_question(project_id: int, query: str, db: Session) -> str:
         db =db,
         project_id = project_id,
         query_vector = query_vector,
-        limit = 5
+        limit = 3
     )
 
     if not relevant_chunks:

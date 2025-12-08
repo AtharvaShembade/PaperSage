@@ -27,7 +27,7 @@ async def get_embedding(text_chunk: str) -> List[float]:
         return [0.0] * EMBEDDING_DIM
 
     try:
-        result = await genai.embed(
+        result = await genai.embed_content_async(
             model = EMBEDDING_MODEL,
             content = text_chunk,
             task_type = "RETRIEVAL_DOCUMENT"
@@ -90,7 +90,7 @@ async def process_paper(paper_id: int, pdf_url: str):
                 "embedding": embedding
             })
 
-        crud.create_chunks_for_paper(
+        crud.create_chunks(
             db = db,
             paper_id = paper_id,
             chunks_data = chunks_with_embeddings

@@ -53,7 +53,7 @@ def get_paper(db: Session, paper_id: str):
 
 def create_paper(db: Session, paper: schemas.PaperCreate, status: str = "processing"):
     db_paper = models.Paper(
-        external_id = paper.external_paper_id,
+        external_id = paper.external_id,
         title = paper.title,
         abstract = paper.abstract,
         year = paper.year,
@@ -89,7 +89,7 @@ def create_chunks(db: Session, paper_id: int, chunks_data: List[Dict[str, Any]])
     db_chunks = [
         models.Chunk(
             paper_id = paper_id,
-            chunk_text = chunk_data["chunk_text"],
+            chunk_text = item["chunk_text"],
             embedding = item["embedding"]
         ) for item in chunks_data
     ]
