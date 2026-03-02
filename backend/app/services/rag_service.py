@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models import crud, models
 from app.core.config import settings
 from typing import List
+from fastapi import HTTPException
 
 try:
     GENERATIVE_MODEL = genai.GenerativeModel("gemini-2.5-pro")

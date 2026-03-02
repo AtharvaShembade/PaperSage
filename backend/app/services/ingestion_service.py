@@ -12,7 +12,7 @@ import google.generativeai as genai
 try:
     genai.configure(api_key = settings.GEMINI_API_KEY)
 
-    EMBEDDING_MODEL = "models/text-embedding-004"
+    EMBEDDING_MODEL = "models/text-embedding-001"
     EMBEDDING_DIM = 768
     logging.info("Successfully configured Gemini API")
 
