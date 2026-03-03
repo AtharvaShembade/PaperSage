@@ -122,6 +122,22 @@ def get_relevant_chunks(
 
     return relevant_chunks
 
+def remove_paper_from_project(db: Session, project_id: int, paper_id: int):
+    db_link = db.query(models.ProjectPaper).filter_by(
+        project_id=project_id,
+        paper_id=paper_id
+    ).first()
+    if db_link:
+        db.delete(db_link)
+        db.commit()
+
+    remaining = db.query(models.ProjectPaper).filter_by(paper_id=paper_id).count()
+    if remaining == 0:
+        db_paper = db.get(models.Paper, paper_id)
+        if db_paper:
+            db.delete(db_paper)
+            db.commit()
+
 # --- Citation Graph CRUD ---
 
 def create_citation_links(db: Session, links_data: List[Dict[str, str]]):
