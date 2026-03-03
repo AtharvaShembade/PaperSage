@@ -54,3 +54,5 @@ frontend/lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+claude.md
