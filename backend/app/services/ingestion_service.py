@@ -2,7 +2,7 @@ import httpx
 import fitz  # PyMuPDF
 import logging
 from sqlalchemy.orm import Session
-from app.models.database import SessionLocal 
+from app.models.database import SessionLocal
 from app.models import crud
 from app.core.config import settings
 from typing import List, Dict, Any
@@ -12,8 +12,8 @@ import google.generativeai as genai
 try:
     genai.configure(api_key = settings.GEMINI_API_KEY)
 
-    EMBEDDING_MODEL = "models/text-embedding-001"
-    EMBEDDING_DIM = 768
+    EMBEDDING_MODEL = "models/gemini-embedding-001"
+    EMBEDDING_DIM = 3072
     logging.info("Successfully configured Gemini API")
 
 except Exception as e:
@@ -59,7 +59,7 @@ async def _download_and_parse_pdf(pdf_url: str) -> str:
             full_text = ""
             with fitz.open(stream = pdf_bytes, filetype = "pdf") as doc:
                 for page in doc:
-                    full_text += page.get_text() + "\n" 
+                    full_text += page.get_text() + "\n"
 
             return full_text
 
@@ -68,12 +68,25 @@ async def _download_and_parse_pdf(pdf_url: str) -> str:
             raise
 
 
-async def process_paper(paper_id: int, pdf_url: str):
+async def process_paper(paper_id: int, arxiv_id: str | None, s2_pdf_url: str | None):
 
     db: Session = SessionLocal()
 
     try:
         logging.info(f"[Ingest Task] Starting ingestion for paper {paper_id}")
+
+        if arxiv_id:
+            pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+            source = "arxiv"
+        elif s2_pdf_url:
+            pdf_url = s2_pdf_url
+            source = "s2"
+        else:
+            crud.update_paper_status(db=db, paper_id=paper_id, status="no_pdf")
+            logging.info(f"[Ingest Task] No PDF found for paper {paper_id}")
+            return
+
+        crud.update_paper_pdf(db=db, paper_id=paper_id, pdf_url=pdf_url, source=source)
 
         full_text = await _download_and_parse_pdf(pdf_url)
 
@@ -106,4 +119,3 @@ async def process_paper(paper_id: int, pdf_url: str):
 
     finally:
         db.close()
-

@@ -12,6 +12,7 @@ class PaperBase(BaseModel):
 
 class PaperCreate(PaperBase):
     pdf_url: Optional[HttpUrl] = None
+    arxiv_id: Optional[str] = None
 
 class Paper(PaperBase):
     id: int

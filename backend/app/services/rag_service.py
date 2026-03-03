@@ -7,10 +7,11 @@ from typing import List
 from fastapi import HTTPException
 
 try:
-    GENERATIVE_MODEL = genai.GenerativeModel("gemini-2.5-pro")
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    GENERATIVE_MODEL = genai.GenerativeModel("gemini-2.5-flash")
 
-    EMBEDDING_MODEL = "models/text-embedding-004"
-    EMBEDDING_DIM = 768
+    EMBEDDING_MODEL = "models/gemini-embedding-001"
+    EMBEDDING_DIM = 3072
 
     logging.info("Successfully configured Gemini API")
 
@@ -30,7 +31,7 @@ async def _get_query_embedding(query: str) -> List[float]:
         result = await genai.embed_content_async(
             model=EMBEDDING_MODEL,
             content=query,
-            task_type="RETRIEVAL_QUERY" 
+            task_type="RETRIEVAL_QUERY"
         )
         return result['embedding']
         

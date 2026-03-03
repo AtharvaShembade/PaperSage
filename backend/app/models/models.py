@@ -46,7 +46,10 @@ class Paper(Base):
     abstract = Column(Text, nullable = True)
     year = Column(Integer, nullable = True)
 
-    status = Column(String, default = "processing", nullable = False, index = True)
+    status   = Column(String, default="processing", nullable=False, index=True)
+    arxiv_id = Column(String, nullable=True, index=True)
+    pdf_url  = Column(String, nullable=True)
+    source   = Column(String, nullable=True)   # "arxiv" or "s2"
 
     projects = relationship("Project", secondary = "project_papers", back_populates = "papers")
 
@@ -63,7 +66,7 @@ class Chunk(Base):
 
     chunk_text = Column(Text, nullable = False)
 
-    embedding = Column(Vector(768))
+    embedding = Column(Vector(3072))
 
 # --- Citation Graph Model ---
 

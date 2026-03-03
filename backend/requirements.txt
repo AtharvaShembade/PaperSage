@@ -8,3 +8,5 @@ httpx
 PyMuPDF
 google-generativeai
 psycopg2-binary
+feedparser
+pydantic-settings

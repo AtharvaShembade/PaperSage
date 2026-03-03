@@ -1,51 +1,45 @@
 import httpx
+import feedparser
 from fastapi import HTTPException
-from app.core.config import settings
 
-SEARCH_API_URL = settings.S2_SEARCH_API_URL
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
 
 async def search_papers(query: str, limit: int = 20) -> list:
-
-    headers = {}
-
-    if settings.S2_API_KEY:
-        headers["x-api-key"] = settings.S2_API_KEY
-    
-    required_fields = "title,authors,year,abstract,openAccessPdf,paperId"
-
     params = {
-        "query": query,
-        "fields": required_fields,
-        # "openAccessPdf": "true",
-        "limit": limit
-    } 
+        "search_query": f"all:{query}",
+        "start": 0,
+        "max_results": limit,
+    }
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(SEARCH_API_URL, headers = headers, params = params)
+            response = await client.get(ARXIV_API_URL, params=params, timeout=15.0)
             response.raise_for_status()
-            data = response.json()
-
-            results = []
-            for paper in data.get("data", []) or []:
-                results.append({
-                    "id": paper.get("paperId", ""),
-                    "title": paper.get("title", ""),
-                    "authors": [a.get("name", "") for a in paper.get("authors", [])],
-                    "abstract": paper.get("abstract", ""),
-                    "year": paper.get("year"),
-                    "citations": paper.get("citationCount", 0),
-                    "openAccessPdf": paper.get("openAccessPdf"),
-                })
-            return results
-        
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                raise HTTPException(
-                    status_code = 429,
-                    detail = "Too many requests."
-                )
-            raise HTTPException(status_code = e.response.status_code, detail=f"Error from Semantic Scholar API: {e.response.text}")
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"arXiv API error: {e.response.text}"
+            )
         except Exception as e:
-            raise HTTPException(status_code = 500, detail = f"Error searching papers: {str(e)}")
-            
+            raise HTTPException(status_code=500, detail=f"Error searching papers: {str(e)}")
+
+    feed = feedparser.parse(response.text)
+    results = []
+
+    for entry in feed.entries:
+        # Strip version suffix: http://arxiv.org/abs/2301.12345v2 → 2301.12345
+        raw_id = entry.get("id", "")
+        arxiv_id = raw_id.split("/abs/")[-1].split("v")[0]
+
+        results.append({
+            "id": arxiv_id,
+            "title": entry.get("title", "").replace("\n", " ").strip(),
+            "authors": [a.get("name", "") for a in entry.get("authors", [])],
+            "abstract": entry.get("summary", "").replace("\n", " ").strip(),
+            "year": int(entry.get("published", "0000")[:4]) or None,
+            "citations": None,
+            "arxiv_id": arxiv_id,
+            "pdf_url": f"https://arxiv.org/pdf/{arxiv_id}.pdf",
+        })
+
+    return results

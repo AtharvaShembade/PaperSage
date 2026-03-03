@@ -31,17 +31,11 @@ async def add_paper(
 
     crud.link_paper_to_project(db = db, project_id = project_id, paper_id = db_paper.id)
 
-    if paper_to_add.pdf_url:
-        import logging
-        logging.info(f"[Ingest Task] Starting ingestion for paper {db_paper.id} with URL: {paper_to_add.pdf_url}")
-        background_tasks.add_task(ingestion_service.process_paper, paper_id = db_paper.id, pdf_url = str(paper_to_add.pdf_url))
-        background_tasks.add_task(
-            ingestion_service.process_paper,
-            paper_id = db_paper.id,
-            pdf_url = str(paper_to_add.pdf_url)
-        )
-    else:
-        # Mark as ready without processing (no PDF to ingest)
-        crud.update_paper_status(db, db_paper.id, "no_pdf")
+    background_tasks.add_task(
+        ingestion_service.process_paper,
+        paper_id   = db_paper.id,
+        arxiv_id   = paper_to_add.arxiv_id,
+        s2_pdf_url = str(paper_to_add.pdf_url) if paper_to_add.pdf_url else None,
+    )
 
     return {"status": "ok", "message": "Paper added to project."}

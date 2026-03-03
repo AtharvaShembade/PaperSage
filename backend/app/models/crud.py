@@ -1,4 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import cast
+from pgvector.sqlalchemy import Vector
 from app.models import models
 from app.schemas import schemas
 from typing import List, Dict, Any
@@ -54,15 +56,23 @@ def get_paper(db: Session, paper_id: str):
 def create_paper(db: Session, paper: schemas.PaperCreate, status: str = "processing"):
     db_paper = models.Paper(
         external_id = paper.external_id,
-        title = paper.title,
-        abstract = paper.abstract,
-        year = paper.year,
-        status = status
+        title       = paper.title,
+        abstract    = paper.abstract,
+        year        = paper.year,
+        arxiv_id    = paper.arxiv_id,
+        status      = status
     )
     db.add(db_paper)
     db.commit()
     db.refresh(db_paper)
     return db_paper
+
+def update_paper_pdf(db: Session, paper_id: int, pdf_url: str, source: str):
+    db_paper = db.get(models.Paper, paper_id)
+    if db_paper:
+        db_paper.pdf_url = pdf_url
+        db_paper.source  = source
+        db.commit()
 
 def link_paper_to_project(db: Session, project_id: int, paper_id: int):
     existing_link = db.query(models.ProjectPaper).filter_by(
@@ -107,7 +117,7 @@ def get_relevant_chunks(
         models.ProjectPaper.project_id == project_id,
         models.Paper.status == 'ready'
     ).order_by(
-        models.Chunk.embedding.l2_distance(query_vector)
+        models.Chunk.embedding.l2_distance(cast(query_vector, Vector(3072)))
     ).limit(limit).all()
 
     return relevant_chunks
