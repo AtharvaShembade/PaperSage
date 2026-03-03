@@ -61,7 +61,7 @@ async def _download_and_parse_pdf(pdf_url: str) -> str:
                 for page in doc:
                     full_text += page.get_text() + "\n"
 
-            return full_text
+            return full_text.replace('\x00', '')
 
         except Exception as e:
             logging.error(f"Failed to parse PDF from {pdf_url}: {str(e)}")
