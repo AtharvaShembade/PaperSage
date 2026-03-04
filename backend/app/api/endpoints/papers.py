@@ -39,3 +39,18 @@ async def add_paper(
     )
 
     return {"status": "ok", "message": "Paper added to project."}
+
+@router.delete("/projects/{project_id}/papers/{paper_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_paper(
+    project_id: int,
+    paper_id: int,
+    db: Session = Depends(database.get_db_session),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    project = db.get(models.Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    crud.remove_paper_from_project(db, project_id=project_id, paper_id=paper_id)
