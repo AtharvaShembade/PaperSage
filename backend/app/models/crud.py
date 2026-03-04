@@ -138,6 +138,11 @@ def remove_paper_from_project(db: Session, project_id: int, paper_id: int):
             db.delete(db_paper)
             db.commit()
 
+def get_chunks_for_paper(db: Session, paper_id: int, limit: int = 20) -> List[models.Chunk]:
+    return db.query(models.Chunk).filter(
+        models.Chunk.paper_id == paper_id
+    ).limit(limit).all()
+
 # --- Citation Graph CRUD ---
 
 def create_citation_links(db: Session, links_data: List[Dict[str, str]]):

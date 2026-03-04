@@ -67,6 +67,22 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
 
+# --- Comparison Schemas ---
+
+class ComparisonRow(BaseModel):
+    paper_id: int
+    title: str
+    year: Optional[int] = None
+    problem: str
+    method: str
+    dataset: str
+    result: str
+    limitation: str
+
+class ComparisonResponse(BaseModel):
+    rows: List[ComparisonRow]
+    skipped: List[str]  # titles of papers skipped (not ready)
+
 # --- Analysis Schemas ---
 
 class GraphNode(BaseModel):
