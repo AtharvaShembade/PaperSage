@@ -56,3 +56,4 @@ frontend/lerna-debug.log*
 *.sw?
 
 claude.md
+.claude/
