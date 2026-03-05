@@ -64,8 +64,13 @@ class ChatRequest(BaseModel):
     query: str
     project_id: int
 
+class ChatSource(BaseModel):
+    title: str
+    chunk: str
+
 class ChatResponse(BaseModel):
     answer: str
+    sources: List[ChatSource] = []
 
 # --- Comparison Schemas ---
 

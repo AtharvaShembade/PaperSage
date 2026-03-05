@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 from app.models import crud, models
 from app.core.config import settings
-from typing import List
+from typing import List, Dict, Any
 from fastapi import HTTPException
 
 try:
@@ -62,8 +62,8 @@ def _build_rag_prompt(query: str, chunks: List[models.Chunk]) -> str:
     """
     return prompt
 
-async def answer_question(project_id: int, query: str, db: Session) -> str:
-    
+async def answer_question(project_id: int, query: str, db: Session) -> Dict[str, Any]:
+
     if not GENERATIVE_MODEL:
         logging.error("Gemini model not available.")
         raise HTTPException(status_code = 500, detail = "Generative model is not configured.")
@@ -71,21 +71,31 @@ async def answer_question(project_id: int, query: str, db: Session) -> str:
     query_vector = await _get_query_embedding(query)
 
     relevant_chunks = crud.get_relevant_chunks(
-        db =db,
-        project_id = project_id,
-        query_vector = query_vector,
-        limit = 3
+        db=db,
+        project_id=project_id,
+        query_vector=query_vector,
+        limit=3
     )
 
     if not relevant_chunks:
-        return "I'm sorry, I couldn't find any relevant information in your project's papers to answer that question."
+        return {
+            "answer": "I'm sorry, I couldn't find any relevant information in your project's papers to answer that question.",
+            "sources": []
+        }
 
     prompt = _build_rag_prompt(query, relevant_chunks)
 
     try:
         response = await GENERATIVE_MODEL.generate_content_async(prompt)
-        return response.text
-    
+        sources = [
+            {"title": chunk.paper.title, "chunk": chunk.chunk_text}
+            for chunk in relevant_chunks
+        ]
+        return {"answer": response.text, "sources": sources}
+
     except Exception as e:
         logging.error(f"Failed to generate response: {e}")
-        return "I'm sorry, I encountered an error while processing your question. Please try again later."
+        return {
+            "answer": "I'm sorry, I encountered an error while processing your question. Please try again later.",
+            "sources": []
+        }

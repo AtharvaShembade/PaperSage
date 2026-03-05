@@ -34,13 +34,16 @@ async def handle_chat_query(
         )
 
     try:
-        answer = await rag_service.answer_question(
+        result = await rag_service.answer_question(
             project_id = project_id,
             query = chat_request.query,
             db = db
         )
 
-        return schemas.ChatResponse(answer = answer)
+        return schemas.ChatResponse(
+            answer=result["answer"],
+            sources=[schemas.ChatSource(**s) for s in result["sources"]]
+        )
 
     except Exception as e:
         logging.error(f"Failed to answer chat query: {e}")
