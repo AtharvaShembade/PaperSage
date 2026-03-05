@@ -24,7 +24,7 @@ def create_project(
 
 
 #Get projects
-@router.get("/", response_model=List[schemas.Project])
+@router.get("/", response_model=List[schemas.ProjectDetail])
 def read_projects(
     *,
     db: Session = Depends(get_db_session),
