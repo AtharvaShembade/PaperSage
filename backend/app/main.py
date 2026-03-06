@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,13 +6,17 @@ from app.api.routes import router
 
 app = FastAPI(title="PaperSage")
 
-#middleware
+# middleware
 origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:8080",
     "http://localhost",
 ]
+
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url:
+    origins.append(frontend_url)
 
 app.add_middleware(
     CORSMiddleware,
