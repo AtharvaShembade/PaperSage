@@ -39,6 +39,29 @@ async def _get_query_embedding(query: str) -> List[float]:
         logging.error(f"Failed to get query embedding: {e}")
         return [0.0] * EMBEDDING_DIM
 
+async def _decompose_query(query: str) -> List[str]:
+    """Break a complex query into 2 focused sub-questions for better retrieval coverage."""
+    prompt = f"""You are a research assistant helping retrieve information from academic papers.
+    Break the following research question into exactly 2 specific sub-questions that together cover the full intent.
+    Each sub-question should be self-contained and optimized for retrieving relevant text passages.
+
+    Return only the 2 sub-questions, one per line, no numbering, no explanation.
+
+    Question: {query}"""
+
+    try:
+        response = await GENERATIVE_MODEL.generate_content_async(prompt)
+        lines = [l.strip() for l in response.text.strip().splitlines() if l.strip()]
+        sub_questions = lines[:2]
+        # Fall back to original query if decomposition fails or returns nothing useful
+        if not sub_questions:
+            return [query]
+        return sub_questions
+    except Exception as e:
+        logging.error(f"Query decomposition failed: {e}")
+        return [query]
+
+
 def _build_rag_prompt(query: str, chunks: List[models.Chunk]) -> str:
 
     context = "\n\n".join([chunk.chunk_text for chunk in chunks])
@@ -68,14 +91,18 @@ async def answer_question(project_id: int, query: str, db: Session) -> Dict[str,
         logging.error("Gemini model not available.")
         raise HTTPException(status_code = 500, detail = "Generative model is not configured.")
 
-    query_vector = await _get_query_embedding(query)
+    sub_questions = await _decompose_query(query)
+    logging.info(f"Query decomposed into: {sub_questions}")
 
-    relevant_chunks = crud.get_relevant_chunks(
-        db=db,
-        project_id=project_id,
-        query_vector=query_vector,
-        limit=3
-    )
+    seen_ids = set()
+    relevant_chunks = []
+    for sq in sub_questions:
+        vec = await _get_query_embedding(sq)
+        chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=4)
+        for chunk in chunks:
+            if chunk.id not in seen_ids:
+                relevant_chunks.append(chunk)
+                seen_ids.add(chunk.id)
 
     if not relevant_chunks:
         return {
