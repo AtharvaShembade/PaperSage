@@ -71,6 +71,7 @@ class ChatSource(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: List[ChatSource] = []
+    follow_ups: List[str] = []
 
 # --- Comparison Schemas ---
 

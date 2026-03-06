@@ -85,6 +85,23 @@ def _build_rag_prompt(query: str, chunks: List[models.Chunk]) -> str:
     """
     return prompt
 
+async def _generate_follow_ups(query: str, answer: str) -> List[str]:
+    """Generate 3 natural follow-up questions based on the query and answer."""
+    prompt = f"""You are a research assistant. Based on the question and answer below, suggest 3 concise follow-up questions a researcher might ask next.
+Return only the 3 questions, one per line, no numbering, no explanation.
+
+Question: {query}
+Answer: {answer}"""
+
+    try:
+        response = await GENERATIVE_MODEL.generate_content_async(prompt)
+        lines = [l.strip() for l in response.text.strip().splitlines() if l.strip()]
+        return lines[:3]
+    except Exception as e:
+        logging.error(f"Follow-up generation failed: {e}")
+        return []
+
+
 async def answer_question(project_id: int, query: str, db: Session) -> Dict[str, Any]:
 
     if not GENERATIVE_MODEL:
@@ -114,15 +131,18 @@ async def answer_question(project_id: int, query: str, db: Session) -> Dict[str,
 
     try:
         response = await GENERATIVE_MODEL.generate_content_async(prompt)
+        answer = response.text
         sources = [
             {"title": chunk.paper.title, "chunk": chunk.chunk_text}
             for chunk in relevant_chunks
         ]
-        return {"answer": response.text, "sources": sources}
+        follow_ups = await _generate_follow_ups(query, answer)
+        return {"answer": answer, "sources": sources, "follow_ups": follow_ups}
 
     except Exception as e:
         logging.error(f"Failed to generate response: {e}")
         return {
             "answer": "I'm sorry, I encountered an error while processing your question. Please try again later.",
-            "sources": []
+            "sources": [],
+            "follow_ups": []
         }
