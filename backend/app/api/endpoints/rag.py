@@ -42,7 +42,8 @@ async def handle_chat_query(
 
         return schemas.ChatResponse(
             answer=result["answer"],
-            sources=[schemas.ChatSource(**s) for s in result["sources"]]
+            sources=[schemas.ChatSource(**s) for s in result["sources"]],
+            follow_ups=result.get("follow_ups", [])
         )
 
     except Exception as e:
