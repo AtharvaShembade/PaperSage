@@ -50,6 +50,7 @@ class Paper(Base):
     arxiv_id = Column(String, nullable=True, index=True)
     pdf_url  = Column(String, nullable=True)
     source   = Column(String, nullable=True)   # "arxiv" or "s2"
+    tldr     = Column(Text, nullable=True)
 
     projects = relationship("Project", secondary = "project_papers", back_populates = "papers")
 

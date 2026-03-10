@@ -1,4 +1,5 @@
 import google.generativeai as genai
+from google.generativeai import protos
 import logging
 from sqlalchemy.orm import Session
 from app.models import crud, models
@@ -6,19 +7,34 @@ from app.core.config import settings
 from typing import List, Dict, Any
 from fastapi import HTTPException
 
+MAX_AGENT_ITERATIONS = 3
+
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    GENERATIVE_MODEL = genai.GenerativeModel("gemini-2.5-flash")
 
     EMBEDDING_MODEL = "models/gemini-embedding-001"
     EMBEDDING_DIM = 3072
 
+    RETRIEVE_TOOL = protos.Tool(function_declarations=[
+        protos.FunctionDeclaration(
+            name="retrieve_context",
+            description="Search the research papers in this project for passages relevant to a query. Call this whenever you need information from the papers.",
+            parameters=protos.Schema(
+                type=protos.Type.OBJECT,
+                properties={
+                    "search_query": protos.Schema(type=protos.Type.STRING, description="The search query to find relevant passages")
+                },
+                required=["search_query"]
+            )
+        )
+    ])
+
     logging.info("Successfully configured Gemini API")
 
 except Exception as e:
-    logging.error(f"Failed to get query embedding: {e}")
-    GENERATIVE_MODEL = None
+    logging.error(f"Failed to configure Gemini API: {e}")
     EMBEDDING_MODEL = None
+    RETRIEVE_TOOL = None
 
 async def _get_query_embedding(query: str) -> List[float]:
     if not EMBEDDING_MODEL:
@@ -39,52 +55,6 @@ async def _get_query_embedding(query: str) -> List[float]:
         logging.error(f"Failed to get query embedding: {e}")
         return [0.0] * EMBEDDING_DIM
 
-async def _decompose_query(query: str) -> List[str]:
-    """Break a complex query into 2 focused sub-questions for better retrieval coverage."""
-    prompt = f"""You are a research assistant helping retrieve information from academic papers.
-    Break the following research question into exactly 2 specific sub-questions that together cover the full intent.
-    Each sub-question should be self-contained and optimized for retrieving relevant text passages.
-
-    Return only the 2 sub-questions, one per line, no numbering, no explanation.
-
-    Question: {query}"""
-
-    try:
-        response = await GENERATIVE_MODEL.generate_content_async(prompt)
-        lines = [l.strip() for l in response.text.strip().splitlines() if l.strip()]
-        sub_questions = lines[:2]
-        # Fall back to original query if decomposition fails or returns nothing useful
-        if not sub_questions:
-            return [query]
-        return sub_questions
-    except Exception as e:
-        logging.error(f"Query decomposition failed: {e}")
-        return [query]
-
-
-def _build_rag_prompt(query: str, chunks: List[models.Chunk]) -> str:
-
-    context = "\n\n".join([chunk.chunk_text for chunk in chunks])
-
-    prompt = f"""
-    You are a helpful AI research assistant. Your task is to answer the user's question 
-    based *only* on the context provided below.
-
-    Do not use any outside knowledge. If the context does not contain the answer,
-    you must state: "I'm sorry, I don't have enough information from the provided 
-    documents to answer that."
-
-    Context:
-    ---
-    {context}
-    ---
-
-    Question: {query}
-
-    Answer:
-    """
-    return prompt
-
 async def _generate_follow_ups(query: str, answer: str) -> List[str]:
     """Generate 3 natural follow-up questions based on the query and answer."""
     prompt = f"""You are a research assistant. Based on the question and answer below, suggest 3 concise follow-up questions a researcher might ask next.
@@ -94,7 +64,8 @@ Question: {query}
 Answer: {answer}"""
 
     try:
-        response = await GENERATIVE_MODEL.generate_content_async(prompt)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = await model.generate_content_async(prompt)
         lines = [l.strip() for l in response.text.strip().splitlines() if l.strip()]
         return lines[:3]
     except Exception as e:
@@ -102,40 +73,74 @@ Answer: {answer}"""
         return []
 
 
-async def answer_question(project_id: int, query: str, db: Session) -> Dict[str, Any]:
+async def answer_question(project_id: int, query: str, db: Session, deep: bool = False) -> Dict[str, Any]:
 
-    if not GENERATIVE_MODEL:
-        logging.error("Gemini model not available.")
-        raise HTTPException(status_code = 500, detail = "Generative model is not configured.")
+    if not RETRIEVE_TOOL:
+        logging.error("Gemini API not configured.")
+        raise HTTPException(status_code=500, detail="Generative model is not configured.")
 
-    sub_questions = await _decompose_query(query)
-    logging.info(f"Query decomposed into: {sub_questions}")
+    chunk_limit = 8 if deep else 4
+    seen_ids: set = set()
+    all_chunks: List[models.Chunk] = []
 
-    seen_ids = set()
-    relevant_chunks = []
-    for sq in sub_questions:
-        vec = await _get_query_embedding(sq)
-        chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=4)
-        for chunk in chunks:
-            if chunk.id not in seen_ids:
-                relevant_chunks.append(chunk)
-                seen_ids.add(chunk.id)
+    system_prompt = (
+        "You are a helpful AI research assistant. Answer the user's question using only "
+        "information retrieved from their research papers via the retrieve_context tool. "
+        "Call retrieve_context one or more times with focused search queries to gather relevant passages. "
+        "Once you have enough context, provide a clear, well-structured answer. "
+        "If the papers don't contain enough information, say so honestly."
+    )
 
-    if not relevant_chunks:
-        return {
-            "answer": "I'm sorry, I couldn't find any relevant information in your project's papers to answer that question.",
-            "sources": []
-        }
-
-    prompt = _build_rag_prompt(query, relevant_chunks)
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        system_instruction=system_prompt,
+        tools=[RETRIEVE_TOOL]
+    )
 
     try:
-        response = await GENERATIVE_MODEL.generate_content_async(prompt)
-        answer = response.text
-        sources = [
-            {"title": chunk.paper.title, "chunk": chunk.chunk_text}
-            for chunk in relevant_chunks
-        ]
+        chat = model.start_chat()
+        response = await chat.send_message_async(query)
+
+        for _ in range(MAX_AGENT_ITERATIONS):
+            part = response.candidates[0].content.parts[0]
+
+            if not hasattr(part, "function_call") or not part.function_call.name:
+                break
+
+            fc = part.function_call
+            if fc.name == "retrieve_context":
+                search_query = fc.args.get("search_query", query)
+                logging.info(f"[Agent] retrieve_context called with: {search_query}")
+
+                vec = await _get_query_embedding(search_query)
+                chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=chunk_limit)
+
+                for chunk in chunks:
+                    if chunk.id not in seen_ids:
+                        all_chunks.append(chunk)
+                        seen_ids.add(chunk.id)
+
+                context_text = "\n\n".join([
+                    f"[{chunk.paper.title}]\n{chunk.chunk_text}" for chunk in chunks
+                ])
+
+                response = await chat.send_message_async(
+                    protos.Part(function_response=protos.FunctionResponse(
+                        name="retrieve_context",
+                        response={"result": context_text if context_text else "No relevant passages found."}
+                    ))
+                )
+
+        answer = response.candidates[0].content.parts[0].text
+
+        if not all_chunks:
+            return {
+                "answer": "I'm sorry, I couldn't find any relevant information in your project's papers to answer that question.",
+                "sources": [],
+                "follow_ups": []
+            }
+
+        sources = [{"title": c.paper.title, "chunk": c.chunk_text} for c in all_chunks]
         follow_ups = await _generate_follow_ups(query, answer)
         return {"answer": answer, "sources": sources, "follow_ups": follow_ups}
 

@@ -37,7 +37,8 @@ async def handle_chat_query(
         result = await rag_service.answer_question(
             project_id = project_id,
             query = chat_request.query,
-            db = db
+            db = db,
+            deep = chat_request.deep
         )
 
         return schemas.ChatResponse(

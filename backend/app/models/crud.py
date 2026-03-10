@@ -85,6 +85,12 @@ def link_paper_to_project(db: Session, project_id: int, paper_id: int):
         db.add(db_link)
         db.commit()
 
+def update_paper_tldr(db: Session, paper_id: int, tldr: str):
+    db_paper = db.get(models.Paper, paper_id)
+    if db_paper:
+        db_paper.tldr = tldr
+        db.commit()
+
 def update_paper_status(db: Session, paper_id: int, status: str):
     db_paper = db.get(models.Paper, paper_id)
     if db_paper:

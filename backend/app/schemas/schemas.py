@@ -17,6 +17,7 @@ class PaperCreate(PaperBase):
 class Paper(PaperBase):
     id: int
     status: str
+    tldr: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -63,6 +64,7 @@ class User(UserBase):
 class ChatRequest(BaseModel):
     query: str
     project_id: int
+    deep: bool = False
 
 class ChatSource(BaseModel):
     title: str
