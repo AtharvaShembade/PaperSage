@@ -109,6 +109,14 @@ async def process_paper(paper_id: int, arxiv_id: str | None, s2_pdf_url: str | N
             chunks_data = chunks_with_embeddings
         )
 
+        try:
+            tldr_prompt = f"In one sentence, summarize the core contribution of this paper:\n\n{full_text[:3000]}"
+            tldr_model = genai.GenerativeModel("gemini-2.5-flash")
+            tldr_response = await tldr_model.generate_content_async(tldr_prompt)
+            crud.update_paper_tldr(db=db, paper_id=paper_id, tldr=tldr_response.text.strip())
+        except Exception as e:
+            logging.warning(f"[Ingest Task] TLDR generation failed for paper {paper_id}: {e}")
+
         crud.update_paper_status(db = db, paper_id = paper_id, status = "ready")
 
         logging.info(f"[Ingest Task] Completed ingestion for paper {paper_id}")

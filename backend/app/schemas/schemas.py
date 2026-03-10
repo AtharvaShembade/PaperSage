@@ -17,6 +17,7 @@ class PaperCreate(PaperBase):
 class Paper(PaperBase):
     id: int
     status: str
+    tldr: Optional[str] = None
 
     class Config:
         orm_mode = True
