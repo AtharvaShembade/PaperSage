@@ -102,7 +102,7 @@ Answer: {answer}"""
         return []
 
 
-async def answer_question(project_id: int, query: str, db: Session) -> Dict[str, Any]:
+async def answer_question(project_id: int, query: str, db: Session, deep: bool = False) -> Dict[str, Any]:
 
     if not GENERATIVE_MODEL:
         logging.error("Gemini model not available.")
@@ -115,7 +115,7 @@ async def answer_question(project_id: int, query: str, db: Session) -> Dict[str,
     relevant_chunks = []
     for sq in sub_questions:
         vec = await _get_query_embedding(sq)
-        chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=4)
+        chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=8 if deep else 4)
         for chunk in chunks:
             if chunk.id not in seen_ids:
                 relevant_chunks.append(chunk)
