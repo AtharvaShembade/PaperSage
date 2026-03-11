@@ -95,6 +95,18 @@ class Annotation(BaseModel):
     class Config:
         orm_mode = True
 
+# --- Literature Review Schemas ---
+
+class LitReviewRequest(BaseModel):
+    question: str
+
+class LitReviewSearchResponse(BaseModel):
+    paper_ids: List[int]
+    message: str
+
+class LitReviewGenerateResponse(BaseModel):
+    review: str
+
 # --- Comparison Schemas ---
 
 class ComparisonRow(BaseModel):

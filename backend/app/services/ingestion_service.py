@@ -59,7 +59,11 @@ async def _download_and_parse_pdf(pdf_url: str) -> str:
             full_text = ""
             with fitz.open(stream = pdf_bytes, filetype = "pdf") as doc:
                 for page in doc:
-                    full_text += page.get_text() + "\n"
+                    try:
+                        full_text += page.get_text() + "\n"
+                    except Exception:
+                        logging.warning(f"Skipped a page in {pdf_url} due to parse error")
+                        continue
 
             return full_text.replace('\x00', '')
 
