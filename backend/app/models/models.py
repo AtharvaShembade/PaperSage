@@ -69,6 +69,19 @@ class Chunk(Base):
 
     embedding = Column(Vector(3072))
 
+# --- Annotation Model ---
+
+class Annotation(Base):
+    __tablename__ = "annotations"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    paper_title = Column(String, nullable=False)
+    chunk_text = Column(Text, nullable=False)
+    user_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project")
+
 # --- Citation Graph Model ---
 
 class CitationLink(Base):

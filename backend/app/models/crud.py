@@ -149,6 +149,35 @@ def get_chunks_for_paper(db: Session, paper_id: int, limit: int = 20) -> List[mo
         models.Chunk.paper_id == paper_id
     ).limit(limit).all()
 
+# --- Annotation CRUD ---
+
+def create_annotation(db: Session, project_id: int, paper_title: str, chunk_text: str) -> models.Annotation:
+    annotation = models.Annotation(project_id=project_id, paper_title=paper_title, chunk_text=chunk_text)
+    db.add(annotation)
+    db.commit()
+    db.refresh(annotation)
+    return annotation
+
+def get_annotations(db: Session, project_id: int) -> List[models.Annotation]:
+    return db.query(models.Annotation).filter(models.Annotation.project_id == project_id).order_by(models.Annotation.created_at.desc()).all()
+
+def get_annotation(db: Session, annotation_id: int) -> models.Annotation:
+    return db.get(models.Annotation, annotation_id)
+
+def update_annotation(db: Session, annotation_id: int, user_note: str) -> models.Annotation:
+    annotation = db.get(models.Annotation, annotation_id)
+    if annotation:
+        annotation.user_note = user_note
+        db.commit()
+        db.refresh(annotation)
+    return annotation
+
+def delete_annotation(db: Session, annotation_id: int):
+    annotation = db.get(models.Annotation, annotation_id)
+    if annotation:
+        db.delete(annotation)
+        db.commit()
+
 # --- Citation Graph CRUD ---
 
 def create_citation_links(db: Session, links_data: List[Dict[str, str]]):

@@ -75,6 +75,26 @@ class ChatResponse(BaseModel):
     sources: List[ChatSource] = []
     follow_ups: List[str] = []
 
+# --- Annotation Schemas ---
+
+class AnnotationCreate(BaseModel):
+    paper_title: str
+    chunk_text: str
+
+class AnnotationUpdate(BaseModel):
+    user_note: str
+
+class Annotation(BaseModel):
+    id: int
+    project_id: int
+    paper_title: str
+    chunk_text: str
+    user_note: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
 # --- Comparison Schemas ---
 
 class ComparisonRow(BaseModel):
