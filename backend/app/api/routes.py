@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import projects, papers, rag, analysis, search, annotations, literature_review
+from .endpoints import projects, papers, rag, analysis, search, annotations, literature_review, discovery
 
 router = APIRouter()
 
@@ -11,3 +11,4 @@ router.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
 router.include_router(search.router, prefix="/search", tags=["search"])
 router.include_router(annotations.router, tags=["annotations"])
 router.include_router(literature_review.router, tags=["literature-review"])
+router.include_router(discovery.router, tags=["discovery"])
