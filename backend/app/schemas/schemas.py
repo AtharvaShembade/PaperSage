@@ -123,6 +123,25 @@ class ComparisonResponse(BaseModel):
     rows: List[ComparisonRow]
     skipped: List[str]  # titles of papers skipped (not ready)
 
+# --- Chat Session Schemas ---
+
+class ChatSessionCreate(BaseModel):
+    name: str = "New Chat"
+
+class ChatSessionUpdate(BaseModel):
+    name: Optional[str] = None
+    messages: Optional[List[dict]] = None
+
+class ChatSessionResponse(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    created_at: datetime
+    messages: List[dict] = []
+
+    class Config:
+        orm_mode = True
+
 # --- Gap Finder Schemas ---
 
 class GapFinderRequest(BaseModel):

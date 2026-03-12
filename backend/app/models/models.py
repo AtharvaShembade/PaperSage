@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -79,6 +79,19 @@ class Annotation(Base):
     chunk_text = Column(Text, nullable=False)
     user_note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project")
+
+# --- Chat Session Model ---
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, default="New Chat", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    messages = Column(JSON, default=list, nullable=False)
 
     project = relationship("Project")
 
