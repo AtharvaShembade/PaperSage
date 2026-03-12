@@ -123,6 +123,26 @@ class ComparisonResponse(BaseModel):
     rows: List[ComparisonRow]
     skipped: List[str]  # titles of papers skipped (not ready)
 
+# --- Gap Finder Schemas ---
+
+class GapFinderRequest(BaseModel):
+    focus: Optional[str] = None
+
+class GapEntry(BaseModel):
+    claim: str
+    evidence: str
+    paper_title: str
+    paper_year: Optional[int] = None
+
+class GapSection(BaseModel):
+    type: str
+    title: str
+    entries: List[GapEntry]
+
+class GapAnalysisResponse(BaseModel):
+    sections: List[GapSection]
+    focus: Optional[str] = None
+
 # --- Analysis Schemas ---
 
 class GraphNode(BaseModel):

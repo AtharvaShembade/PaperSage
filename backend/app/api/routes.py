@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import projects, papers, rag, analysis, search, annotations, literature_review, discovery
+from .endpoints import projects, papers, rag, analysis, search, annotations, literature_review, discovery, gap_finder
 
 router = APIRouter()
 
@@ -12,3 +12,4 @@ router.include_router(search.router, prefix="/search", tags=["search"])
 router.include_router(annotations.router, tags=["annotations"])
 router.include_router(literature_review.router, tags=["literature-review"])
 router.include_router(discovery.router, tags=["discovery"])
+router.include_router(gap_finder.router, tags=["gap-finder"])
