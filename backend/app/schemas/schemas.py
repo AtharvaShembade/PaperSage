@@ -75,6 +75,38 @@ class ChatResponse(BaseModel):
     sources: List[ChatSource] = []
     follow_ups: List[str] = []
 
+# --- Annotation Schemas ---
+
+class AnnotationCreate(BaseModel):
+    paper_title: str
+    chunk_text: str
+
+class AnnotationUpdate(BaseModel):
+    user_note: str
+
+class Annotation(BaseModel):
+    id: int
+    project_id: int
+    paper_title: str
+    chunk_text: str
+    user_note: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+# --- Literature Review Schemas ---
+
+class LitReviewRequest(BaseModel):
+    question: str
+
+class LitReviewSearchResponse(BaseModel):
+    paper_ids: List[int]
+    message: str
+
+class LitReviewGenerateResponse(BaseModel):
+    review: str
+
 # --- Comparison Schemas ---
 
 class ComparisonRow(BaseModel):
@@ -90,6 +122,45 @@ class ComparisonRow(BaseModel):
 class ComparisonResponse(BaseModel):
     rows: List[ComparisonRow]
     skipped: List[str]  # titles of papers skipped (not ready)
+
+# --- Chat Session Schemas ---
+
+class ChatSessionCreate(BaseModel):
+    name: str = "New Chat"
+
+class ChatSessionUpdate(BaseModel):
+    name: Optional[str] = None
+    messages: Optional[List[dict]] = None
+
+class ChatSessionResponse(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    created_at: datetime
+    messages: List[dict] = []
+
+    class Config:
+        orm_mode = True
+
+# --- Gap Finder Schemas ---
+
+class GapFinderRequest(BaseModel):
+    focus: Optional[str] = None
+
+class GapEntry(BaseModel):
+    claim: str
+    evidence: str
+    paper_title: str
+    paper_year: Optional[int] = None
+
+class GapSection(BaseModel):
+    type: str
+    title: str
+    entries: List[GapEntry]
+
+class GapAnalysisResponse(BaseModel):
+    sections: List[GapSection]
+    focus: Optional[str] = None
 
 # --- Analysis Schemas ---
 

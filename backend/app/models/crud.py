@@ -149,6 +149,73 @@ def get_chunks_for_paper(db: Session, paper_id: int, limit: int = 20) -> List[mo
         models.Chunk.paper_id == paper_id
     ).limit(limit).all()
 
+# --- Annotation CRUD ---
+
+def create_annotation(db: Session, project_id: int, paper_title: str, chunk_text: str) -> models.Annotation:
+    annotation = models.Annotation(project_id=project_id, paper_title=paper_title, chunk_text=chunk_text)
+    db.add(annotation)
+    db.commit()
+    db.refresh(annotation)
+    return annotation
+
+def get_annotations(db: Session, project_id: int) -> List[models.Annotation]:
+    return db.query(models.Annotation).filter(models.Annotation.project_id == project_id).order_by(models.Annotation.created_at.desc()).all()
+
+def get_annotation(db: Session, annotation_id: int) -> models.Annotation:
+    return db.get(models.Annotation, annotation_id)
+
+def update_annotation(db: Session, annotation_id: int, user_note: str) -> models.Annotation:
+    annotation = db.get(models.Annotation, annotation_id)
+    if annotation:
+        annotation.user_note = user_note
+        db.commit()
+        db.refresh(annotation)
+    return annotation
+
+def delete_annotation(db: Session, annotation_id: int):
+    annotation = db.get(models.Annotation, annotation_id)
+    if annotation:
+        db.delete(annotation)
+        db.commit()
+
+# --- Chat Session CRUD ---
+
+def get_chat_sessions(db: Session, project_id: int, user_id: int) -> List[models.ChatSession]:
+    return (
+        db.query(models.ChatSession)
+        .filter(models.ChatSession.project_id == project_id, models.ChatSession.user_id == user_id)
+        .order_by(models.ChatSession.created_at.desc())
+        .all()
+    )
+
+def create_chat_session(db: Session, project_id: int, user_id: int, name: str = "New Chat") -> models.ChatSession:
+    session = models.ChatSession(project_id=project_id, user_id=user_id, name=name, messages=[])
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+def get_chat_session(db: Session, session_id: int) -> models.ChatSession:
+    return db.get(models.ChatSession, session_id)
+
+def update_chat_session(db: Session, session_id: int, name: str = None, messages: List[dict] = None) -> models.ChatSession:
+    session = db.get(models.ChatSession, session_id)
+    if not session:
+        return None
+    if name is not None:
+        session.name = name
+    if messages is not None:
+        session.messages = list(messages)  # reassign to trigger SQLAlchemy change detection
+    db.commit()
+    db.refresh(session)
+    return session
+
+def delete_chat_session(db: Session, session_id: int):
+    session = db.get(models.ChatSession, session_id)
+    if session:
+        db.delete(session)
+        db.commit()
+
 # --- Citation Graph CRUD ---
 
 def create_citation_links(db: Session, links_data: List[Dict[str, str]]):
