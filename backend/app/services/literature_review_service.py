@@ -142,7 +142,8 @@ async def generate_review(project_id: int, question: str, db: Session) -> str:
         "3. **Methods** — Common approaches and methodologies used\n"
         "4. **Gaps & Contradictions** — What's missing or debated\n"
         "5. **Future Directions** — Open questions and potential next steps\n\n"
-        "Cite papers by title inline. Be thorough but concise."
+        "Cite papers by title inline. Be thorough but concise. "
+        "Never mention tool names, function names, or internal processes in your responses."
     )
 
     model = genai.GenerativeModel(
@@ -154,7 +155,8 @@ async def generate_review(project_id: int, question: str, db: Session) -> str:
     try:
         chat = model.start_chat()
         response = await chat.send_message_async(
-            f"Write a literature review answering: {question}"
+            f"Write a literature review on the topic: {question}. "
+            f"If you need clarification, ask the user directly without mentioning any tools or internal functions."
         )
 
         for _ in range(5):  # more iterations for thorough review
