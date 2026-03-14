@@ -1,19 +1,19 @@
 # PaperSage
 
-An agentic RAG research assistant for academics. Add papers, ask questions, find research gaps, and generate literature reviews — all grounded in actual paper content.
+An agentic RAG research assistant for academics. Add papers, ask questions, find research gaps, and generate literature reviews. All grounded in actual paper content.
 
 **Live:** https://papersage-research.vercel.app
 
 ## Features
 
-- **Agentic RAG Chat** — Ask anything about your papers. The AI agent retrieves relevant passages on its own, issues multiple search queries if needed, and answers with cited sources.
-- **Research Gaps** — Scans all papers for open problems, contradictions, methodological gaps, and future directions. Evidence is verbatim — nothing fabricated.
-- **Literature Review** — Type a research question, get a structured review: overview, key findings, methods, gaps, and future directions.
-- **Paper Comparison** — Side-by-side table of problem, method, dataset, results, and limitations across all papers.
-- **Related Papers** — AI reads your existing papers and discovers related work on arXiv.
-- **Chat Sessions** — DB-backed sessions with history that persists across devices.
-- **Notes & Annotations** — Pin source chunks from chat to notes, add commentary.
-- **Citation Export** — Copy APA or BibTeX citation per paper.
+- **Agentic RAG Chat**:Ask anything about your papers. The AI agent retrieves relevant passages on its own, issues multiple search queries if needed, and answers with cited sources.
+- **Research Gaps**:Scans all papers for open problems, contradictions, methodological gaps, and future directions. Evidence is verbatim:nothing fabricated.
+- **Literature Review**:Type a research question, get a structured review: overview, key findings, methods, gaps, and future directions.
+- **Paper Comparison**:Side-by-side table of problem, method, dataset, results, and limitations across all papers.
+- **Related Papers**:AI reads your existing papers and discovers related work on arXiv.
+- **Chat Sessions**:DB-backed sessions with history that persists across devices.
+- **Notes & Annotations**:Pin source chunks from chat to notes, add commentary.
+- **Citation Export**:Copy APA or BibTeX citation per paper.
 
 ## Tech Stack
 
@@ -27,10 +27,10 @@ An agentic RAG research assistant for academics. Add papers, ask questions, find
 
 ## How It Works
 
-1. **Add a paper** — Search arXiv, click add. The backend downloads the PDF, parses it with PyMuPDF, splits into 800-char chunks, embeds each chunk with Gemini (`gemini-embedding-001`, 3072 dims), and stores vectors in pgvector.
-2. **Chat** — Ask a question. A Gemini function-calling agent decides what to search for, retrieves relevant chunks from pgvector, and generates a grounded answer with cited sources. The agent can issue multiple retrieval calls for complex questions.
-3. **Research Gaps** — Each of 4 sections runs a targeted retrieval, passes verbatim chunks to Gemini, and extracts only claims supported by direct quotes from the papers.
-4. **Literature Review** — Searches arXiv, adds papers to the project, then synthesises a structured review using the same agentic retrieval loop.
+1. **Add a paper**:Search arXiv, click add. The backend downloads the PDF, parses it with PyMuPDF, splits into 800-char chunks, embeds each chunk with Gemini (`gemini-embedding-001`, 3072 dims), and stores vectors in pgvector.
+2. **Chat**:Ask a question. A Gemini function-calling agent decides what to search for, retrieves relevant chunks from pgvector, and generates a grounded answer with cited sources. The agent can issue multiple retrieval calls for complex questions.
+3. **Research Gaps**:Each of 4 sections runs a targeted retrieval, passes verbatim chunks to Gemini, and extracts only claims supported by direct quotes from the papers.
+4. **Literature Review**:Searches arXiv, adds papers to the project, then synthesises a structured review using the same agentic retrieval loop.
 
 ## Local Setup
 
