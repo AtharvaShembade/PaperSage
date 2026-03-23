@@ -22,7 +22,7 @@ class Project(Base):
     name = Column(String, index = True, nullable = False)
     created_at = Column(DateTime, default = datetime.utcnow)
 
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
     owner = relationship("User", back_populates="projects")
 
     papers = relationship("Paper", secondary="project_papers", back_populates="projects")
