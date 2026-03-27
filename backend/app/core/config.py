@@ -12,5 +12,6 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SENTRY_DSN: str = ""
 
 settings = Settings()
