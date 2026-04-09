@@ -2,11 +2,19 @@ import google.generativeai as genai
 from google.generativeai import protos
 import logging
 import json
+import hashlib
 from sqlalchemy.orm import Session
 from app.models import crud, models
 from app.core.config import settings
+from app.core.redis import get_redis
 from typing import List, Dict, Any, AsyncGenerator
 from fastapi import HTTPException
+
+RAG_CACHE_TTL = 3600  # 1 hour
+
+def _rag_cache_key(project_id: int, query: str, deep: bool) -> str:
+    h = hashlib.sha256(f"{project_id}:{query}:{deep}".encode()).hexdigest()[:16]
+    return f"rag:{project_id}:{h}"
 
 MAX_AGENT_ITERATIONS = 3
 
@@ -80,6 +88,15 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
         logging.error("Gemini API not configured.")
         raise HTTPException(status_code=500, detail="Generative model is not configured.")
 
+    # --- Cache check ---
+    redis = await get_redis()
+    cache_key = _rag_cache_key(project_id, query, deep)
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            logging.info(f"[RAG cache] hit: {cache_key}")
+            return json.loads(cached)
+
     chunk_limit = 8 if deep else 4
     seen_ids: set = set()
     all_chunks: List[models.Chunk] = []
@@ -143,7 +160,12 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
 
         sources = [{"title": c.paper.title, "chunk": c.chunk_text} for c in all_chunks]
         follow_ups = await _generate_follow_ups(query, answer)
-        return {"answer": answer, "sources": sources, "follow_ups": follow_ups}
+        result = {"answer": answer, "sources": sources, "follow_ups": follow_ups}
+
+        if redis:
+            await redis.set(cache_key, json.dumps(result), ex=RAG_CACHE_TTL)
+
+        return result
 
     except Exception as e:
         logging.error(f"Failed to generate response: {e}")
@@ -167,6 +189,18 @@ async def answer_question_stream(
     if not RETRIEVE_TOOL:
         yield f"data: {json.dumps({'type': 'error', 'detail': 'Generative model is not configured.'})}\n\n"
         return
+
+    # --- Cache check: on hit, stream cached answer instantly ---
+    redis = await get_redis()
+    cache_key = _rag_cache_key(project_id, query, deep)
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            logging.info(f"[RAG stream cache] hit: {cache_key}")
+            data = json.loads(cached)
+            yield f"data: {json.dumps({'type': 'token', 'content': data['answer']})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'sources': data['sources'], 'follow_ups': data['follow_ups']})}\n\n"
+            return
 
     chunk_limit = 8 if deep else 4
     seen_ids: set = set()
@@ -252,6 +286,10 @@ async def answer_question_stream(
         full_answer = "".join(full_answer_parts)
         sources = [{"title": c.paper.title, "chunk": c.chunk_text} for c in all_chunks]
         follow_ups = await _generate_follow_ups(query, full_answer)
+
+        if redis:
+            result = {"answer": full_answer, "sources": sources, "follow_ups": follow_ups}
+            await redis.set(cache_key, json.dumps(result), ex=RAG_CACHE_TTL)
 
         yield f"data: {json.dumps({'type': 'done', 'sources': sources, 'follow_ups': follow_ups})}\n\n"
 
