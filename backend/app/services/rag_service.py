@@ -11,6 +11,7 @@ from typing import List, Dict, Any, AsyncGenerator
 from fastapi import HTTPException
 
 RAG_CACHE_TTL = 3600  # 1 hour
+EMBEDDING_CACHE_TTL = 604800  # 7 days
 
 def _rag_cache_key(project_id: int, query: str, deep: bool) -> str:
     h = hashlib.sha256(f"{project_id}:{query}:{deep}".encode()).hexdigest()[:16]
@@ -49,17 +50,27 @@ async def _get_query_embedding(query: str) -> List[float]:
     if not EMBEDDING_MODEL:
         logging.error("RAG embedding model is not configured.")
         return [0.0] * EMBEDDING_DIM
-        
+
+    redis = await get_redis()
+    if redis:
+        cache_key = "emb:qry:" + hashlib.sha256(query.encode()).hexdigest()[:16]
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
     try:
-        # Note the task_type is 'RETRIEVAL_QUERY'.
-        # This is different from the 'RETRIEVAL_DOCUMENT' in your ingestion service.
         result = await genai.embed_content_async(
             model=EMBEDDING_MODEL,
             content=query,
             task_type="RETRIEVAL_QUERY"
         )
-        return result['embedding']
-        
+        embedding = result['embedding']
+
+        if redis:
+            await redis.set(cache_key, json.dumps(embedding), ex=EMBEDDING_CACHE_TTL)
+
+        return embedding
+
     except Exception as e:
         logging.error(f"Failed to get query embedding: {e}")
         return [0.0] * EMBEDDING_DIM

@@ -1,13 +1,18 @@
 import httpx
 import fitz  # PyMuPDF
+import json
+import hashlib
 import logging
 from sqlalchemy.orm import Session
 from app.models.database import SessionLocal
 from app.models import crud
 from app.core.config import settings
+from app.core.redis import get_redis
 from typing import List, Dict, Any
 
 import google.generativeai as genai
+
+EMBEDDING_CACHE_TTL = 604800  # 7 days
 
 try:
     genai.configure(api_key = settings.GEMINI_API_KEY)
@@ -26,13 +31,25 @@ async def get_embedding(text_chunk: str) -> List[float]:
         raise ValueError("Gemini API not configured")
         return [0.0] * EMBEDDING_DIM
 
+    redis = await get_redis()
+    if redis:
+        cache_key = "emb:doc:" + hashlib.sha256(text_chunk.encode()).hexdigest()[:16]
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
     try:
         result = await genai.embed_content_async(
             model = EMBEDDING_MODEL,
             content = text_chunk,
             task_type = "RETRIEVAL_DOCUMENT"
         )
-        return result['embedding']
+        embedding = result['embedding']
+
+        if redis:
+            await redis.set(cache_key, json.dumps(embedding), ex=EMBEDDING_CACHE_TTL)
+
+        return embedding
 
     except Exception as e:
         logging.error(f"Failed to get embedding for {text_chunk}: {str(e)}")
