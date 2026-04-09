@@ -35,6 +35,8 @@ def get_current_user(
         if not user_email:
             raise HTTPException(status_code = 401, detail = "No email found for user")
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,

@@ -1,10 +1,11 @@
 import google.generativeai as genai
 from google.generativeai import protos
 import logging
+import json
 from sqlalchemy.orm import Session
 from app.models import crud, models
 from app.core.config import settings
-from typing import List, Dict, Any
+from typing import List, Dict, Any, AsyncGenerator
 from fastapi import HTTPException
 
 MAX_AGENT_ITERATIONS = 3
@@ -151,3 +152,109 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
             "sources": [],
             "follow_ups": []
         }
+
+
+async def answer_question_stream(
+    project_id: int, query: str, db: Session, deep: bool = False
+) -> AsyncGenerator[str, None]:
+    """
+    Same agent loop as answer_question, but streams the final synthesis via SSE.
+    Yields SSE-formatted strings:
+      data: {"type": "token", "content": "..."}
+      data: {"type": "done", "sources": [...], "follow_ups": [...]}
+      data: {"type": "error", "detail": "..."}
+    """
+    if not RETRIEVE_TOOL:
+        yield f"data: {json.dumps({'type': 'error', 'detail': 'Generative model is not configured.'})}\n\n"
+        return
+
+    chunk_limit = 8 if deep else 4
+    seen_ids: set = set()
+    all_chunks: List[models.Chunk] = []
+
+    system_prompt = (
+        "You are a helpful AI research assistant. Answer the user's question using only "
+        "information retrieved from their research papers via the retrieve_context tool. "
+        "Call retrieve_context one or more times with focused search queries to gather relevant passages. "
+        "Once you have enough context, provide a clear, well-structured answer. "
+        "If the papers don't contain enough information, say so honestly."
+    )
+
+    yield f"data: {json.dumps({'type': 'status', 'content': 'searching'})}\n\n"
+
+    # --- Agent loop (tool calls, non-streaming) ---
+    agent_model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        system_instruction=system_prompt,
+        tools=[RETRIEVE_TOOL]
+    )
+
+    try:
+        chat = agent_model.start_chat()
+        response = await chat.send_message_async(query)
+
+        for _ in range(MAX_AGENT_ITERATIONS):
+            part = response.candidates[0].content.parts[0]
+            if not hasattr(part, "function_call") or not part.function_call.name:
+                break
+
+            fc = part.function_call
+            if fc.name == "retrieve_context":
+                search_query = fc.args.get("search_query", query)
+                logging.info(f"[Stream Agent] retrieve_context: {search_query}")
+
+                vec = await _get_query_embedding(search_query)
+                chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=chunk_limit)
+
+                for chunk in chunks:
+                    if chunk.id not in seen_ids:
+                        all_chunks.append(chunk)
+                        seen_ids.add(chunk.id)
+
+                context_text = "\n\n".join([
+                    f"[{chunk.paper.title}]\n{chunk.chunk_text}" for chunk in chunks
+                ])
+
+                response = await chat.send_message_async(
+                    protos.Part(function_response=protos.FunctionResponse(
+                        name="retrieve_context",
+                        response={"result": context_text if context_text else "No relevant passages found."}
+                    ))
+                )
+
+        if not all_chunks:
+            yield f"data: {json.dumps({'type': 'token', 'content': 'I could not find any relevant information in your project papers to answer that question.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'sources': [], 'follow_ups': []})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'type': 'status', 'content': 'generating'})}\n\n"
+
+        # --- Stream final synthesis ---
+        context_text = "\n\n".join([
+            f"[{c.paper.title}]\n{c.chunk_text}" for c in all_chunks
+        ])
+        synthesis_prompt = (
+            f"Using the retrieved context below, answer the following question clearly and thoroughly.\n\n"
+            f"Question: {query}\n\n"
+            f"Context:\n{context_text}"
+        )
+
+        synthesis_model = genai.GenerativeModel("gemini-2.5-flash")
+        full_answer_parts = []
+
+        async for chunk in await synthesis_model.generate_content_async(
+            synthesis_prompt, stream=True
+        ):
+            if chunk.text:
+                full_answer_parts.append(chunk.text)
+                yield f"data: {json.dumps({'type': 'token', 'content': chunk.text})}\n\n"
+
+        full_answer = "".join(full_answer_parts)
+        sources = [{"title": c.paper.title, "chunk": c.chunk_text} for c in all_chunks]
+        follow_ups = await _generate_follow_ups(query, full_answer)
+
+        yield f"data: {json.dumps({'type': 'done', 'sources': sources, 'follow_ups': follow_ups})}\n\n"
+
+    except Exception as e:
+        logging.error(f"Streaming RAG failed: {e}")
+        yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
