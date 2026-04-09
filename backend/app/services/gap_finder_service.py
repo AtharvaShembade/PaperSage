@@ -1,11 +1,19 @@
 import json
 import logging
 import asyncio
+import hashlib
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from app.models import crud
+from app.core.redis import get_redis
 from app.services.rag_service import _get_query_embedding
+
+GAPS_CACHE_TTL = 43200  # 12 hours
+
+def _gaps_cache_key(project_id: int, focus: Optional[str]) -> str:
+    h = hashlib.sha256((focus or "").encode()).hexdigest()[:16]
+    return f"gaps:{project_id}:{h}"
 
 SECTIONS = [
     {
@@ -164,10 +172,25 @@ async def run_gap_analysis(
     db: Session,
     focus: Optional[str] = None,
 ) -> Dict[str, Any]:
+    redis = await get_redis()
+    cache_key = _gaps_cache_key(project_id, focus)
+
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            logging.info(f"[GapFinder] cache hit for project {project_id} focus={focus!r}")
+            return json.loads(cached)
+
     results = []
     for section in SECTIONS:
         result = await _analyze_section(section, project_id, focus, db)
         results.append(result)
         await asyncio.sleep(0.5)  # avoid rate limits between sections
 
-    return {"sections": results, "focus": focus}
+    output = {"sections": results, "focus": focus}
+
+    if redis:
+        await redis.set(cache_key, json.dumps(output), ex=GAPS_CACHE_TTL)
+        logging.info(f"[GapFinder] cached result for project {project_id} focus={focus!r}")
+
+    return output
