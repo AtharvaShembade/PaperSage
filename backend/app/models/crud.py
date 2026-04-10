@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import cast
+from sqlalchemy import cast, func
 from pgvector.sqlalchemy import Vector
 from app.models import models
 from app.schemas import schemas
@@ -127,6 +127,27 @@ def get_relevant_chunks(
     ).limit(limit).all()
 
     return relevant_chunks
+
+
+def get_chunks_bm25(
+    db: Session,
+    project_id: int,
+    query_text: str,
+    limit: int = 10
+) -> List[models.Chunk]:
+    """Full-text keyword search using PostgreSQL tsvector/tsquery."""
+    return db.query(models.Chunk).join(models.Paper).join(models.ProjectPaper).filter(
+        models.ProjectPaper.project_id == project_id,
+        models.Paper.status == 'ready',
+        func.to_tsvector('english', models.Chunk.chunk_text).op('@@')(
+            func.plainto_tsquery('english', query_text)
+        )
+    ).order_by(
+        func.ts_rank(
+            func.to_tsvector('english', models.Chunk.chunk_text),
+            func.plainto_tsquery('english', query_text)
+        ).desc()
+    ).limit(limit).all()
 
 def remove_paper_from_project(db: Session, project_id: int, paper_id: int):
     db_link = db.query(models.ProjectPaper).filter_by(

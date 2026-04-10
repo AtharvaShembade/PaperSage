@@ -75,6 +75,31 @@ async def _get_query_embedding(query: str) -> List[float]:
         logging.error(f"Failed to get query embedding: {e}")
         return [0.0] * EMBEDDING_DIM
 
+async def _retrieve_hybrid(
+    db: Session,
+    project_id: int,
+    query: str,
+    query_vec: List[float],
+    limit: int,
+    rrf_k: int = 60
+) -> List[models.Chunk]:
+    """Hybrid retrieval: pgvector + BM25 merged with Reciprocal Rank Fusion."""
+    vec_chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=query_vec, limit=limit * 2)
+    bm25_chunks = crud.get_chunks_bm25(db=db, project_id=project_id, query_text=query, limit=limit * 2)
+
+    scores: Dict[int, Dict] = {}
+    for rank, chunk in enumerate(vec_chunks):
+        scores[chunk.id] = {'chunk': chunk, 'score': 1 / (rrf_k + rank + 1)}
+    for rank, chunk in enumerate(bm25_chunks):
+        if chunk.id in scores:
+            scores[chunk.id]['score'] += 1 / (rrf_k + rank + 1)
+        else:
+            scores[chunk.id] = {'chunk': chunk, 'score': 1 / (rrf_k + rank + 1)}
+
+    merged = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
+    return [v['chunk'] for v in merged[:limit]]
+
+
 async def _generate_follow_ups(query: str, answer: str) -> List[str]:
     """Generate 3 natural follow-up questions based on the query and answer."""
     prompt = f"""You are a research assistant. Based on the question and answer below, suggest 3 concise follow-up questions a researcher might ask next.
@@ -142,7 +167,7 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
                 logging.info(f"[Agent] retrieve_context called with: {search_query}")
 
                 vec = await _get_query_embedding(search_query)
-                chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=chunk_limit)
+                chunks = await _retrieve_hybrid(db=db, project_id=project_id, query=search_query, query_vec=vec, limit=chunk_limit)
 
                 for chunk in chunks:
                     if chunk.id not in seen_ids:
@@ -249,7 +274,7 @@ async def answer_question_stream(
                 logging.info(f"[Stream Agent] retrieve_context: {search_query}")
 
                 vec = await _get_query_embedding(search_query)
-                chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=chunk_limit)
+                chunks = await _retrieve_hybrid(db=db, project_id=project_id, query=search_query, query_vec=vec, limit=chunk_limit)
 
                 for chunk in chunks:
                     if chunk.id not in seen_ids:
