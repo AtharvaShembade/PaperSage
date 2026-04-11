@@ -2,11 +2,20 @@ import google.generativeai as genai
 from google.generativeai import protos
 import logging
 import json
+import hashlib
 from sqlalchemy.orm import Session
 from app.models import crud, models
 from app.core.config import settings
+from app.core.redis import get_redis
 from typing import List, Dict, Any, AsyncGenerator
 from fastapi import HTTPException
+
+RAG_CACHE_TTL = 3600  # 1 hour
+EMBEDDING_CACHE_TTL = 604800  # 7 days
+
+def _rag_cache_key(project_id: int, query: str, deep: bool) -> str:
+    h = hashlib.sha256(f"{project_id}:{query}:{deep}".encode()).hexdigest()[:16]
+    return f"rag:{project_id}:{h}"
 
 MAX_AGENT_ITERATIONS = 3
 
@@ -41,20 +50,55 @@ async def _get_query_embedding(query: str) -> List[float]:
     if not EMBEDDING_MODEL:
         logging.error("RAG embedding model is not configured.")
         return [0.0] * EMBEDDING_DIM
-        
+
+    redis = await get_redis()
+    if redis:
+        cache_key = "emb:qry:" + hashlib.sha256(query.encode()).hexdigest()[:16]
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
     try:
-        # Note the task_type is 'RETRIEVAL_QUERY'.
-        # This is different from the 'RETRIEVAL_DOCUMENT' in your ingestion service.
         result = await genai.embed_content_async(
             model=EMBEDDING_MODEL,
             content=query,
             task_type="RETRIEVAL_QUERY"
         )
-        return result['embedding']
-        
+        embedding = result['embedding']
+
+        if redis:
+            await redis.set(cache_key, json.dumps(embedding), ex=EMBEDDING_CACHE_TTL)
+
+        return embedding
+
     except Exception as e:
         logging.error(f"Failed to get query embedding: {e}")
         return [0.0] * EMBEDDING_DIM
+
+async def _retrieve_hybrid(
+    db: Session,
+    project_id: int,
+    query: str,
+    query_vec: List[float],
+    limit: int,
+    rrf_k: int = 60
+) -> List[models.Chunk]:
+    """Hybrid retrieval: pgvector + BM25 merged with Reciprocal Rank Fusion."""
+    vec_chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=query_vec, limit=limit * 2)
+    bm25_chunks = crud.get_chunks_bm25(db=db, project_id=project_id, query_text=query, limit=limit * 2)
+
+    scores: Dict[int, Dict] = {}
+    for rank, chunk in enumerate(vec_chunks):
+        scores[chunk.id] = {'chunk': chunk, 'score': 1 / (rrf_k + rank + 1)}
+    for rank, chunk in enumerate(bm25_chunks):
+        if chunk.id in scores:
+            scores[chunk.id]['score'] += 1 / (rrf_k + rank + 1)
+        else:
+            scores[chunk.id] = {'chunk': chunk, 'score': 1 / (rrf_k + rank + 1)}
+
+    merged = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
+    return [v['chunk'] for v in merged[:limit]]
+
 
 async def _generate_follow_ups(query: str, answer: str) -> List[str]:
     """Generate 3 natural follow-up questions based on the query and answer."""
@@ -79,6 +123,15 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
     if not RETRIEVE_TOOL:
         logging.error("Gemini API not configured.")
         raise HTTPException(status_code=500, detail="Generative model is not configured.")
+
+    # --- Cache check ---
+    redis = await get_redis()
+    cache_key = _rag_cache_key(project_id, query, deep)
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            logging.info(f"[RAG cache] hit: {cache_key}")
+            return json.loads(cached)
 
     chunk_limit = 8 if deep else 4
     seen_ids: set = set()
@@ -114,7 +167,7 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
                 logging.info(f"[Agent] retrieve_context called with: {search_query}")
 
                 vec = await _get_query_embedding(search_query)
-                chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=chunk_limit)
+                chunks = await _retrieve_hybrid(db=db, project_id=project_id, query=search_query, query_vec=vec, limit=chunk_limit)
 
                 for chunk in chunks:
                     if chunk.id not in seen_ids:
@@ -143,7 +196,12 @@ async def answer_question(project_id: int, query: str, db: Session, deep: bool =
 
         sources = [{"title": c.paper.title, "chunk": c.chunk_text} for c in all_chunks]
         follow_ups = await _generate_follow_ups(query, answer)
-        return {"answer": answer, "sources": sources, "follow_ups": follow_ups}
+        result = {"answer": answer, "sources": sources, "follow_ups": follow_ups}
+
+        if redis:
+            await redis.set(cache_key, json.dumps(result), ex=RAG_CACHE_TTL)
+
+        return result
 
     except Exception as e:
         logging.error(f"Failed to generate response: {e}")
@@ -167,6 +225,18 @@ async def answer_question_stream(
     if not RETRIEVE_TOOL:
         yield f"data: {json.dumps({'type': 'error', 'detail': 'Generative model is not configured.'})}\n\n"
         return
+
+    # --- Cache check: on hit, stream cached answer instantly ---
+    redis = await get_redis()
+    cache_key = _rag_cache_key(project_id, query, deep)
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            logging.info(f"[RAG stream cache] hit: {cache_key}")
+            data = json.loads(cached)
+            yield f"data: {json.dumps({'type': 'token', 'content': data['answer']})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'sources': data['sources'], 'follow_ups': data['follow_ups']})}\n\n"
+            return
 
     chunk_limit = 8 if deep else 4
     seen_ids: set = set()
@@ -204,7 +274,7 @@ async def answer_question_stream(
                 logging.info(f"[Stream Agent] retrieve_context: {search_query}")
 
                 vec = await _get_query_embedding(search_query)
-                chunks = crud.get_relevant_chunks(db=db, project_id=project_id, query_vector=vec, limit=chunk_limit)
+                chunks = await _retrieve_hybrid(db=db, project_id=project_id, query=search_query, query_vec=vec, limit=chunk_limit)
 
                 for chunk in chunks:
                     if chunk.id not in seen_ids:
@@ -252,6 +322,10 @@ async def answer_question_stream(
         full_answer = "".join(full_answer_parts)
         sources = [{"title": c.paper.title, "chunk": c.chunk_text} for c in all_chunks]
         follow_ups = await _generate_follow_ups(query, full_answer)
+
+        if redis:
+            result = {"answer": full_answer, "sources": sources, "follow_ups": follow_ups}
+            await redis.set(cache_key, json.dumps(result), ex=RAG_CACHE_TTL)
 
         yield f"data: {json.dumps({'type': 'done', 'sources': sources, 'follow_ups': follow_ups})}\n\n"
 

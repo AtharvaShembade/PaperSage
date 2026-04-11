@@ -13,5 +13,6 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SENTRY_DSN: str = ""
+    REDIS_URL: str = ""
 
 settings = Settings()

@@ -5,7 +5,13 @@ import google.generativeai as genai
 from sqlalchemy.orm import Session
 from app.models import crud, models
 from app.core.config import settings
+from app.core.redis import get_redis
 from app.schemas.schemas import ComparisonRow, ComparisonResponse
+
+COMPARISON_CACHE_TTL = 86400  # 24 hours
+
+def _comparison_cache_key(project_id: int) -> str:
+    return f"comparison:{project_id}"
 
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -70,6 +76,15 @@ async def generate_comparison(project_id: int, db: Session) -> ComparisonRespons
     if not _MODEL:
         raise RuntimeError("Gemini model is not configured.")
 
+    redis = await get_redis()
+    cache_key = _comparison_cache_key(project_id)
+
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            logging.info(f"comparison_service: cache hit for project {project_id}")
+            return ComparisonResponse.model_validate_json(cached)
+
     project = crud.get_project(db, project_id)
     papers = project.papers or []
 
@@ -77,5 +92,10 @@ async def generate_comparison(project_id: int, db: Session) -> ComparisonRespons
     skipped = [p.title for p in papers if p.status != "ready"]
 
     rows = await asyncio.gather(*[_extract_for_paper(p, db) for p in ready])
+    result = ComparisonResponse(rows=list(rows), skipped=skipped)
 
-    return ComparisonResponse(rows=list(rows), skipped=skipped)
+    if redis:
+        await redis.set(cache_key, result.model_dump_json(), ex=COMPARISON_CACHE_TTL)
+        logging.info(f"comparison_service: cached result for project {project_id}")
+
+    return result
