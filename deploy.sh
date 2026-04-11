@@ -1,6 +1,6 @@
 #!/bin/bash
 gcloud run deploy papersage-api \
-  --image us-central1-docker.pkg.dev/papersage/papersage/api:v2.5 \
+  --image us-central1-docker.pkg.dev/papersage/papersage/api:v3.0 \
   --region us-central1 \
   --platform managed \
   --allow-unauthenticated \
