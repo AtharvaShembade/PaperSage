@@ -14,6 +14,7 @@ An agentic RAG research assistant for academics. Add papers, ask questions, find
 - **Chat Sessions**:DB-backed sessions with history that persists across devices.
 - **Notes & Annotations**:Pin source chunks from chat to notes, add commentary.
 - **Citation Export**:Copy APA or BibTeX citation per paper.
+- **Streaming Responses**:Chat answers stream token-by-token so you see results as they're generated.
 
 ## Tech Stack
 
@@ -23,12 +24,13 @@ An agentic RAG research assistant for academics. Add papers, ask questions, find
 | Backend | FastAPI, SQLAlchemy, PostgreSQL + pgvector |
 | Auth | Supabase |
 | LLM | Google Gemini (`gemini-2.5-flash` + `gemini-embedding-001`) |
+| Cache | Redis (RAG, comparison, and embedding cache) |
 | Deployment | Google Cloud Run (backend) + Vercel (frontend) |
 
 ## How It Works
 
 1. **Add a paper**:Search arXiv, click add. The backend downloads the PDF, parses it with PyMuPDF, splits into 800-char chunks, embeds each chunk with Gemini (`gemini-embedding-001`, 3072 dims), and stores vectors in pgvector.
-2. **Chat**:Ask a question. A Gemini function-calling agent decides what to search for, retrieves relevant chunks from pgvector, and generates a grounded answer with cited sources. The agent can issue multiple retrieval calls for complex questions.
+2. **Chat**:Ask a question. A Gemini function-calling agent decides what to search for, then runs hybrid retrieval — BM25 keyword search merged with pgvector semantic search via Reciprocal Rank Fusion — to find the most relevant chunks. Generates a grounded, streamed answer with cited sources. The agent can issue multiple retrieval calls for complex questions.
 3. **Research Gaps**:Each of 4 sections runs a targeted retrieval, passes verbatim chunks to Gemini, and extracts only claims supported by direct quotes from the papers.
 4. **Literature Review**:Searches arXiv, adds papers to the project, then synthesises a structured review using the same agentic retrieval loop.
 
@@ -40,6 +42,7 @@ An agentic RAG research assistant for academics. Add papers, ask questions, find
 - Node.js 18+
 - A [Supabase](https://supabase.com) project with PostgreSQL + pgvector enabled
 - A [Google Gemini](https://aistudio.google.com) API key
+- Redis (for RAG and embedding cache)
 
 ### 1. Clone the repo
 
